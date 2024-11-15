@@ -150,7 +150,8 @@ dfPBmerged$Cprop <- (dfPBmerged$C) / (dfPBmerged$A + dfPBmerged$T + dfPBmerged$C
 
 dfPBmerged <- cbind(dfPBmerged, as.data.frame(trinucleotideFrequency(dfPBmerged$Sequence, as.prob = TRUE)))
 
-
+### Maryam: Since creating a function that would nucleotide frequency would need more lines than the ones written above,
+### I decided that it would be better to stay the way it is.
 
 ## Creating & Testing the Classifier Model -----
 
