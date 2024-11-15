@@ -40,33 +40,6 @@ PB1_fetch <- entrez_fetch(db = "nuccore", web_history = PB1_search$web_history, 
 
 write(PB1_fetch, "PB1_fetch.fasta", sep = "\n") 
 
-stringSet <- readDNAStringSet("./PB1_fetch.fasta")
-
-dfPB1 <- data.frame(PB1_Title = names(stringSet), PB1_Sequence = paste(stringSet))
-
-dfPB1$Species_Name <- word(dfPB1$PB1_Title, 2L, 3L)
-
-View(dfPB1)
-
-
-# There may be duplicate sequence copies in the data I pulled, so I am removing any records that have the same sequence and title combination. This is done to ensure that I am using distinct data points for my classification model. 
-
-dfPB1clean <- dfPB1[!duplicated(dfPB1[, c("PB1_Sequence", "PB1_Title")]), ]
-
-# Adding a new column with the gene name, one with the sequence length and then rearranging the columns: 
-
-dfPB1clean$Gene_Name <- "PB1" 
-
-dfPB1clean$Sequence_Length <- nchar(dfPB1clean$PB1_Sequence)
-
-dfPB1clean <- dfPB1clean[, c("PB1_Title", "Gene_Name", "Species_Name", "PB1_Sequence", "Sequence_Length")]
-
-View(dfPB1clean)
-
-# Filtering out any missing sequences: 
-
-dfPB1clean <- dfPB1clean %>%
-  filter(!is.na(PB1_Sequence)) 
 
 
 
@@ -81,42 +54,51 @@ PB2_fetch <- entrez_fetch(db = "nuccore", web_history = PB2_search$web_history, 
 
 write(PB2_fetch, "PB2_fetch.fasta", sep = "\n") 
 
-stringSet <- readDNAStringSet("./PB2_fetch.fasta")
 
-dfPB2 <- data.frame(PB2_Title = names(stringSet), PB2_Sequence = paste(stringSet))
+### Maryam: I created a nested function that would execute the data preparation, cleaning and merging into a single data frame in the end:
 
-dfPB2$Species_Name <- word(dfPB2$PB2_Title, 2L, 3L)
+process_and_merge <- function(pb1_fasta_path, pb2_fasta_path) {
+  
+  # Nested function to process a single FASTA file
+  process_fasta_data <- function(fasta_file_path, gene_name) {
+    
+    stringSet <- readDNAStringSet(fasta_file_path)
+    
+    # Create a data frame with sequence titles and sequences
+    df <- data.frame(Title = names(stringSet), Sequence = paste(stringSet))
+    
+    # Extract species name from the sequence title
+    df$Species_Name <- word(df$Title, 2L, 3L)
+    
+    # Remove duplicates based on sequence and title
+    df_clean <- df[!duplicated(df[, c("Sequence", "Title")]), ]
+    
+    # Add gene name and sequence length columns
+    df_clean$Gene_Name <- gene_name
+    df_clean$Sequence_Length <- nchar(df_clean$Sequence)
+    
+    # Reorder columns for consistency
+    df_clean <- df_clean[, c("Title", "Gene_Name", "Species_Name", "Sequence", "Sequence_Length")]
+    
+    # Filter out any missing sequences
+    df_clean <- df_clean %>% filter(!is.na(Sequence))
+    return(df_clean)
+  }
+  
+  # Process PB1 and PB2 data
+  dfPB1clean <- process_fasta_data(pb1_fasta_path, "PB1")
+  dfPB2clean <- process_fasta_data(pb2_fasta_path, "PB2")
+  
+  # Merge the processed data frames for PB1 and PB2
+  df_merged <- rbind(dfPB1clean, dfPB2clean)
+  return(df_merged)
+}
 
-View(dfPB2)
+### Maryam: Now the only thing that we need to do is give the fasta files to the function:
+dfPBmerged <- process_and_merge("./PB1_fetch.fasta", "./PB2_fetch.fasta")
 
-dfPB2clean <- dfPB2[!duplicated(dfPB2[, c("PB2_Sequence", "PB2_Title")]), ]
+View(dfPBmerged)
 
-# Adding a new column that indicates the gene name and a column that indicates the length of each sequence:
-
-dfPB2clean$Gene_Name <- "PB2" 
-
-dfPB2clean$Sequence_Length <- nchar(dfPB2clean$PB2_Sequence)
-
-dfPB2clean <- dfPB2clean[, c("PB2_Title", "Gene_Name", "Species_Name", "PB2_Sequence", "Sequence_Length")]
-
-View(dfPB2clean)
-
-dfPB2clean <- dfPB2clean %>%
-  filter(!is.na(PB2_Sequence)) 
-
-
-# There are no gaps or Ns in these sequences so I will not have to do that additional filtering step to process the data. I have also specified the length of each sequence when I pulled the data from NCBI. 
-
-# Next, I will merging the PB1 data and PB2 data into a new data frame. First, I will changing the column names so that they are the same, this makes the merging step easier. 
-
-
-dfPB2clean2 <- dfPB2clean %>%
-   rename(Sequence = PB2_Sequence, Title = PB2_Title)
-
-dfPB1clean2 <- dfPB1clean %>%
-   rename(Sequence = PB1_Sequence, Title = PB1_Title)
-
-dfPBmerged <- rbind(dfPB1clean2, dfPB2clean2)
 
 # Validating that there are no NAs in the data and also that all sequences have length of 2200-2400: 
 
