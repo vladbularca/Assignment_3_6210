@@ -17,56 +17,30 @@ library(viridis)
 # + scale_color/fill_viridis_c/d()
 theme_set(theme_light())
 library(Biostrings)
+library (stringr) 	# So that the “word” function would run smoothly
 library(rentrez)
 library(seqinr)
 library(dbplyr)
 conflicted::conflicts_prefer(dplyr::filter())
 conflicted::conflicts_prefer(dplyr::rename())
 library(randomForest)
+library(ggplot2)
 
 options(timeout = 300)
-
 
 
 ## Data Retrieval & Data Manipulation -------
 
 # Retrieving 5000 PB1 sequences from NCBI GenBank for the Orthomyxoviridae family and filtering for sequences between a length of 2200 and 2400 to remove any outliers. First, the specific IDs were retrieved and then fetched using entrez functions. Data was retrieved on Oct 22, 2024.
 
-# PB1_search <- entrez_search(db = "nuccore", term = "(Orthomyxoviridae[ORGN] AND PB1[GENE] AND 2200:2400[SLEN]", retmax = 5000, use_history = TRUE)
+PB1_search <- entrez_search(db = "nuccore", term = "(Orthomyxoviridae[ORGN] AND PB1[GENE] AND 2200:2400[SLEN]", retmax = 5000, use_history = TRUE)
 
-# PB1_fetch <- entrez_fetch(db = "nuccore", web_history = PB1_search$web_history, rettype = "fasta", retmax = 5000)
+PB1_fetch <- entrez_fetch(db = "nuccore", web_history = PB1_search$web_history, rettype = "fasta", retmax = 5000)
 
 # Converting this output to a fasta file and then converting this to a data frame so I can further process and visualize the data: 
 
-# write(PB1_fetch, "PB1_fetch.fasta", sep = "\n") 
+write(PB1_fetch, "PB1_fetch.fasta", sep = "\n") 
 
-stringSet <- readDNAStringSet ("Assignment_2_Data/PB1_fetch.fasta")
-
-dfPB1 <- data.frame(PB1_Title = names(stringSet), PB1_Sequence = paste(stringSet))
-
-dfPB1$Species_Name <- word(dfPB1$PB1_Title, 2L, 3L)
-
-View(dfPB1)
-
-
-# There may be duplicate sequence copies in the data I pulled, so I am removing any records that have the same sequence and title combination. This is done to ensure that I am using distinct data points for my classification model. 
-
-dfPB1clean <- dfPB1[!duplicated(dfPB1[, c("PB1_Sequence", "PB1_Title")]), ]
-
-# Adding a new column with the gene name, one with the sequence length and then rearranging the columns: 
-
-dfPB1clean$Gene_Name <- "PB1" 
-
-dfPB1clean$Sequence_Length <- nchar(dfPB1clean$PB1_Sequence)
-
-dfPB1clean <- dfPB1clean[, c("PB1_Title", "Gene_Name", "Species_Name", "PB1_Sequence", "Sequence_Length")]
-
-View(dfPB1clean)
-
-# Filtering out any missing sequences: 
-
-dfPB1clean <- dfPB1clean %>%
-  filter(!is.na(PB1_Sequence)) 
 
 
 
@@ -74,49 +48,58 @@ dfPB1clean <- dfPB1clean %>%
 
 # I will also do the same data manipulation/filtering steps from above for PB2: 
 
-# PB2_search <- entrez_search(db = "nuccore", term = "(Orthomyxoviridae[ORGN] AND PB2[GENE] AND 2200:2400[SLEN]", retmax = 5000, use_history = TRUE)
+PB2_search <- entrez_search(db = "nuccore", term = "(Orthomyxoviridae[ORGN] AND PB2[GENE] AND 2200:2400[SLEN]", retmax = 5000, use_history = TRUE)
 
 
-# PB2_fetch <- entrez_fetch(db = "nuccore", web_history = PB2_search$web_history, rettype = "fasta", retmax = 5000)
+PB2_fetch <- entrez_fetch(db = "nuccore", web_history = PB2_search$web_history, rettype = "fasta", retmax = 5000)
 
-# write(PB2_fetch, "PB2_fetch.fasta", sep = "\n") 
-
-stringSet <- readDNAStringSet("Assignment_2_Data/PB2_fetch.fasta")
-
-dfPB2 <- data.frame(PB2_Title = names(stringSet), PB2_Sequence = paste(stringSet))
-
-dfPB2$Species_Name <- word(dfPB2$PB2_Title, 2L, 3L)
-
-View(dfPB2)
-
-dfPB2clean <- dfPB2[!duplicated(dfPB2[, c("PB2_Sequence", "PB2_Title")]), ]
-
-# Adding a new column that indicates the gene name and a column that indicates the length of each sequence:
-
-dfPB2clean$Gene_Name <- "PB2" 
-
-dfPB2clean$Sequence_Length <- nchar(dfPB2clean$PB2_Sequence)
-
-dfPB2clean <- dfPB2clean[, c("PB2_Title", "Gene_Name", "Species_Name", "PB2_Sequence", "Sequence_Length")]
-
-View(dfPB2clean)
-
-dfPB2clean <- dfPB2clean %>%
-  filter(!is.na(PB2_Sequence)) 
+write(PB2_fetch, "PB2_fetch.fasta", sep = "\n") 
 
 
-# There are no gaps or Ns in these sequences so I will not have to do that additional filtering step to process the data. I have also specified the length of each sequence when I pulled the data from NCBI. 
+### Maryam: I created a nested function that would execute the data preparation, cleaning and merging into a single data frame in the end:
 
-# Next, I will merging the PB1 data and PB2 data into a new data frame. First, I will changing the column names so that they are the same, this makes the merging step easier. 
+process_and_merge <- function(pb1_fasta_path, pb2_fasta_path) {
+  
+  # Nested function to process a single FASTA file
+  process_fasta_data <- function(fasta_file_path, gene_name) {
+    
+    stringSet <- readDNAStringSet(fasta_file_path)
+    
+    # Create a data frame with sequence titles and sequences
+    df <- data.frame(Title = names(stringSet), Sequence = paste(stringSet))
+    
+    # Extract species name from the sequence title
+    df$Species_Name <- word(df$Title, 2L, 3L)
+    
+    # Remove duplicates based on sequence and title
+    df_clean <- df[!duplicated(df[, c("Sequence", "Title")]), ]
+    
+    # Add gene name and sequence length columns
+    df_clean$Gene_Name <- gene_name
+    df_clean$Sequence_Length <- nchar(df_clean$Sequence)
+    
+    # Reorder columns for consistency
+    df_clean <- df_clean[, c("Title", "Gene_Name", "Species_Name", "Sequence", "Sequence_Length")]
+    
+    # Filter out any missing sequences
+    df_clean <- df_clean %>% filter(!is.na(Sequence))
+    return(df_clean)
+  }
+  
+  # Process PB1 and PB2 data
+  dfPB1clean <- process_fasta_data(pb1_fasta_path, "PB1")
+  dfPB2clean <- process_fasta_data(pb2_fasta_path, "PB2")
+  
+  # Merge the processed data frames for PB1 and PB2
+  df_merged <- rbind(dfPB1clean, dfPB2clean)
+  return(df_merged)
+}
 
+### Maryam: Now the only thing that we need to do is give the fasta files to the function:
+dfPBmerged <- process_and_merge("./PB1_fetch.fasta", "./PB2_fetch.fasta")
 
-dfPB2clean2 <- dfPB2clean %>%
-   rename(Sequence = PB2_Sequence, Title = PB2_Title)
+View(dfPBmerged)
 
-dfPB1clean2 <- dfPB1clean %>%
-   rename(Sequence = PB1_Sequence, Title = PB1_Title)
-
-dfPBmerged <- rbind(dfPB1clean2, dfPB2clean2)
 
 # Validating that there are no NAs in the data and also that all sequences have length of 2200-2400: 
 
@@ -168,7 +151,8 @@ dfPBmerged$Cprop <- (dfPBmerged$C) / (dfPBmerged$A + dfPBmerged$T + dfPBmerged$C
 
 dfPBmerged <- cbind(dfPBmerged, as.data.frame(trinucleotideFrequency(dfPBmerged$Sequence, as.prob = TRUE)))
 
-
+### Maryam: Since creating a function that would nucleotide frequency would need more lines than the ones written above,
+### I decided that it would be better to stay the way it is.
 
 ## Creating & Testing the Classifier Model -----
 
@@ -249,7 +233,7 @@ dfTraining2 <- dfPBmerged %>%
   filter(Species_Name == "Influenza A"|Species_Name == "Influenza B") %>%
   filter(!Title %in% dfValidation2$Title) %>%
   group_by(Gene_Name, Species_Name) %>%
-  sample_n(300)
+  sample_n(299)
 
 
 table(dfTraining2$Gene_Name,dfTraining2$Species_Name)
@@ -282,7 +266,78 @@ ggplot(data = confusion_df, aes(x = predicted, y = observed)) +
   scale_fill_gradient(low = "lightblue", high = "royalblue") +
   geom_text(aes(label = Freq), color = "white") +
   labs(title = "Nucleotide Proportion Confusion Matrix", x = "Predicted", y = "Observed") +
-  theme_minimal() + theme(plot.title = element_text(hjust = 0.5))
+  theme_minimal() + theme
+
+### Maryam: Another suitable plot for this project is "Feature Importance plot" that provides insights into which sequence features were most useful for classification.
+
+# Extract feature importance from the model
+importance_data <- as.data.frame(randomForest::importance(gene_classifier3)) # Replace with gene_classifier or gene_classifier2 if needed
+importance_data$Feature <- rownames(importance_data)
+
+# Create the feature importance plot
+ggplot(importance_data, aes(x = reorder(Feature, MeanDecreaseGini), y = MeanDecreaseGini, fill = MeanDecreaseGini)) +
+  geom_bar(stat = "identity", width = 0.7, color = "black", show.legend = FALSE) +
+  scale_fill_gradient(low = "lightgreen", high = "darkgreen") +
+  coord_flip() +
+  geom_text(aes(label = round(MeanDecreaseGini, 2)), hjust = -0.2, color = "black", size = 3.5) +
+  labs(
+    title = "Feature Importance in Random Forest Classifier",
+    x = "Features",
+    y = "Mean Decrease in Gini Index"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.title.y = element_text(size = 12),
+    axis.title.x = element_text(size = 12),
+    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = 10)
+  ) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank())
+
+### Maryam: The importance scores (MeanDecreaseGini) generated from random forest indicate how much each feature contributes to reducing classification uncertainty.
+### The Feature Importance plot demonstrates that Aprop group was the most influential in distinguishing between PB1 and PB2 with a score of 278.
+
+### Maryam: In order to analyze  whether the nucleotide proportions (e.g., Aprop, Tprop, Gprop, Cprop) differ significantly between PB1 and PB2 sequences. We can use the Anova analysis and depict the results using violin plot.
+# Reshape data for easier analysis and visualization
+nucleotide_data <- dfPBmerged %>%
+  select(Gene_Name, Aprop, Tprop, Gprop, Cprop) %>%
+  pivot_longer(cols = c(Aprop, Tprop, Gprop, Cprop), names_to = "Nucleotide", values_to = "Proportion")
+
+# To perform ANOVA for each nucleotide proportion
+anova_results <- nucleotide_data %>%
+  group_by(Nucleotide) %>%
+  summarize(
+    ANOVA_pvalue = summary(aov(Proportion ~ Gene_Name))[[1]]["Pr(>F)"][1]
+  )
+
+print("ANOVA Results:")
+print(anova_results)
+
+# To Create a violin plot
+ggplot(nucleotide_data, aes(x = Nucleotide, y = Proportion, fill = Gene_Name)) +
+  geom_violin(trim = TRUE, alpha = 0.7, color = "black") +  # Violin plot with color and transparency
+  geom_boxplot(width = 0.1, position = position_dodge(0.9), alpha = 0.5, outlier.shape = NA) +  # Add boxplot inside
+  stat_summary(fun = "mean", geom = "point", position = position_dodge(0.9), color = "black", size = 2.5) +  # Add mean points
+  scale_fill_manual(values = c("#FF9999", "#99CCFF")) +  # Custom colors for PB1 and PB2
+  labs(
+    title = "Nucleotide Proportion Distributions by Gene",
+    x = "Nucleotide",
+    y = "Proportion",
+    fill = "Gene Type"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "top"
+  )
+
+### Maryam: It can also be understood that A and G proportions show the most noticeable differences between PB1 and PB2, with PB1 generally having slightly higher A proportions and PB2 having higher G proportions.
+### C and T proportions have overlapping distributions, suggesting these nucleotides do not significantly differentiate the gene types. These findings are in line with the result of Feature Importance plot.
 
 # Since all of the sequences were categorized correctly, the confusion matrix does not show a lot of variation in the colour gradient. However, it is a useful way to visualize how the predicted sequence results compare to the observed values. 
 
