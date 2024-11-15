@@ -17,6 +17,7 @@ library(viridis)
 # + scale_color/fill_viridis_c/d()
 theme_set(theme_light())
 library(Biostrings)
+library (stringr)
 library(rentrez)
 library(seqinr)
 library(dbplyr)
@@ -27,20 +28,19 @@ library(randomForest)
 options(timeout = 300)
 
 
-
 ## Data Retrieval & Data Manipulation -------
 
 # Retrieving 5000 PB1 sequences from NCBI GenBank for the Orthomyxoviridae family and filtering for sequences between a length of 2200 and 2400 to remove any outliers. First, the specific IDs were retrieved and then fetched using entrez functions. Data was retrieved on Oct 22, 2024.
 
-# PB1_search <- entrez_search(db = "nuccore", term = "(Orthomyxoviridae[ORGN] AND PB1[GENE] AND 2200:2400[SLEN]", retmax = 5000, use_history = TRUE)
+PB1_search <- entrez_search(db = "nuccore", term = "(Orthomyxoviridae[ORGN] AND PB1[GENE] AND 2200:2400[SLEN]", retmax = 5000, use_history = TRUE)
 
-# PB1_fetch <- entrez_fetch(db = "nuccore", web_history = PB1_search$web_history, rettype = "fasta", retmax = 5000)
+PB1_fetch <- entrez_fetch(db = "nuccore", web_history = PB1_search$web_history, rettype = "fasta", retmax = 5000)
 
 # Converting this output to a fasta file and then converting this to a data frame so I can further process and visualize the data: 
 
-# write(PB1_fetch, "PB1_fetch.fasta", sep = "\n") 
+write(PB1_fetch, "PB1_fetch.fasta", sep = "\n") 
 
-stringSet <- readDNAStringSet ("Assignment_2_Data/PB1_fetch.fasta")
+stringSet <- readDNAStringSet("./PB1_fetch.fasta")
 
 dfPB1 <- data.frame(PB1_Title = names(stringSet), PB1_Sequence = paste(stringSet))
 
@@ -74,14 +74,14 @@ dfPB1clean <- dfPB1clean %>%
 
 # I will also do the same data manipulation/filtering steps from above for PB2: 
 
-# PB2_search <- entrez_search(db = "nuccore", term = "(Orthomyxoviridae[ORGN] AND PB2[GENE] AND 2200:2400[SLEN]", retmax = 5000, use_history = TRUE)
+PB2_search <- entrez_search(db = "nuccore", term = "(Orthomyxoviridae[ORGN] AND PB2[GENE] AND 2200:2400[SLEN]", retmax = 5000, use_history = TRUE)
 
 
-# PB2_fetch <- entrez_fetch(db = "nuccore", web_history = PB2_search$web_history, rettype = "fasta", retmax = 5000)
+PB2_fetch <- entrez_fetch(db = "nuccore", web_history = PB2_search$web_history, rettype = "fasta", retmax = 5000)
 
-# write(PB2_fetch, "PB2_fetch.fasta", sep = "\n") 
+write(PB2_fetch, "PB2_fetch.fasta", sep = "\n") 
 
-stringSet <- readDNAStringSet("Assignment_2_Data/PB2_fetch.fasta")
+stringSet <- readDNAStringSet("./PB2_fetch.fasta")
 
 dfPB2 <- data.frame(PB2_Title = names(stringSet), PB2_Sequence = paste(stringSet))
 
@@ -249,7 +249,7 @@ dfTraining2 <- dfPBmerged %>%
   filter(Species_Name == "Influenza A"|Species_Name == "Influenza B") %>%
   filter(!Title %in% dfValidation2$Title) %>%
   group_by(Gene_Name, Species_Name) %>%
-  sample_n(300)
+  sample_n(299)
 
 
 table(dfTraining2$Gene_Name,dfTraining2$Species_Name)
