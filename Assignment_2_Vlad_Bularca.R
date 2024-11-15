@@ -17,13 +17,14 @@ library(viridis)
 # + scale_color/fill_viridis_c/d()
 theme_set(theme_light())
 library(Biostrings)
-library (stringr)
+library (stringr) 	# So that the “word” function would run smoothly
 library(rentrez)
 library(seqinr)
 library(dbplyr)
 conflicted::conflicts_prefer(dplyr::filter())
 conflicted::conflicts_prefer(dplyr::rename())
 library(randomForest)
+library(ggplot2)
 
 options(timeout = 300)
 
@@ -265,7 +266,78 @@ ggplot(data = confusion_df, aes(x = predicted, y = observed)) +
   scale_fill_gradient(low = "lightblue", high = "royalblue") +
   geom_text(aes(label = Freq), color = "white") +
   labs(title = "Nucleotide Proportion Confusion Matrix", x = "Predicted", y = "Observed") +
-  theme_minimal() + theme(plot.title = element_text(hjust = 0.5))
+  theme_minimal() + theme
+
+### Maryam: Another suitable plot for this project is "Feature Importance plot" that provides insights into which sequence features were most useful for classification.
+
+# Extract feature importance from the model
+importance_data <- as.data.frame(randomForest::importance(gene_classifier3)) # Replace with gene_classifier or gene_classifier2 if needed
+importance_data$Feature <- rownames(importance_data)
+
+# Create the feature importance plot
+ggplot(importance_data, aes(x = reorder(Feature, MeanDecreaseGini), y = MeanDecreaseGini, fill = MeanDecreaseGini)) +
+  geom_bar(stat = "identity", width = 0.7, color = "black", show.legend = FALSE) +
+  scale_fill_gradient(low = "lightgreen", high = "darkgreen") +
+  coord_flip() +
+  geom_text(aes(label = round(MeanDecreaseGini, 2)), hjust = -0.2, color = "black", size = 3.5) +
+  labs(
+    title = "Feature Importance in Random Forest Classifier",
+    x = "Features",
+    y = "Mean Decrease in Gini Index"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.title.y = element_text(size = 12),
+    axis.title.x = element_text(size = 12),
+    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = 10)
+  ) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank())
+
+### Maryam: The importance scores (MeanDecreaseGini) generated from random forest indicate how much each feature contributes to reducing classification uncertainty.
+### The Feature Importance plot demonstrates that Aprop group was the most influential in distinguishing between PB1 and PB2 with a score of 278.
+
+### Maryam: In order to analyze  whether the nucleotide proportions (e.g., Aprop, Tprop, Gprop, Cprop) differ significantly between PB1 and PB2 sequences. We can use the Anova analysis and depict the results using violin plot.
+# Reshape data for easier analysis and visualization
+nucleotide_data <- dfPBmerged %>%
+  select(Gene_Name, Aprop, Tprop, Gprop, Cprop) %>%
+  pivot_longer(cols = c(Aprop, Tprop, Gprop, Cprop), names_to = "Nucleotide", values_to = "Proportion")
+
+# To perform ANOVA for each nucleotide proportion
+anova_results <- nucleotide_data %>%
+  group_by(Nucleotide) %>%
+  summarize(
+    ANOVA_pvalue = summary(aov(Proportion ~ Gene_Name))[[1]]["Pr(>F)"][1]
+  )
+
+print("ANOVA Results:")
+print(anova_results)
+
+# To Create a violin plot
+ggplot(nucleotide_data, aes(x = Nucleotide, y = Proportion, fill = Gene_Name)) +
+  geom_violin(trim = TRUE, alpha = 0.7, color = "black") +  # Violin plot with color and transparency
+  geom_boxplot(width = 0.1, position = position_dodge(0.9), alpha = 0.5, outlier.shape = NA) +  # Add boxplot inside
+  stat_summary(fun = "mean", geom = "point", position = position_dodge(0.9), color = "black", size = 2.5) +  # Add mean points
+  scale_fill_manual(values = c("#FF9999", "#99CCFF")) +  # Custom colors for PB1 and PB2
+  labs(
+    title = "Nucleotide Proportion Distributions by Gene",
+    x = "Nucleotide",
+    y = "Proportion",
+    fill = "Gene Type"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "top"
+  )
+
+### Maryam: It can also be understood that A and G proportions show the most noticeable differences between PB1 and PB2, with PB1 generally having slightly higher A proportions and PB2 having higher G proportions.
+### C and T proportions have overlapping distributions, suggesting these nucleotides do not significantly differentiate the gene types. These findings are in line with the result of Feature Importance plot.
 
 # Since all of the sequences were categorized correctly, the confusion matrix does not show a lot of variation in the colour gradient. However, it is a useful way to visualize how the predicted sequence results compare to the observed values. 
 
